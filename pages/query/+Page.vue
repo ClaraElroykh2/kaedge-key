@@ -14,7 +14,7 @@
       <div class="card-body">
         <div class="mb-2 flex items-center justify-between gap-3">
           <span class="text-sm text-base-content/60">本地订单会在打开页面时自动同步最新状态</span>
-          <AppButton size="sm" variant="outline" :loading="syncingLocalOrders" @click="refreshLocalOrders">刷新状态</AppButton>
+          <AppButton size="sm" variant="outline" :loading="syncingLocalOrders" @click="handleRefreshLocalOrders">刷新状态</AppButton>
         </div>
         <div v-if="!localOrders.length" class="flex flex-col items-center gap-2 py-8 text-base-content/40">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -95,6 +95,10 @@ onMounted(() => {
   refreshLocalOrders();
 });
 
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("zh-CN", { dateStyle: "short", timeStyle: "short" });
 }
@@ -109,7 +113,7 @@ function isTerminalLocalOrder(order: LocalOrder) {
   );
 }
 
-async function refreshLocalOrders() {
+async function refreshLocalOrders(minLoadingMs = 0) {
   if (!localOrders.value.length || syncingLocalOrders.value) return;
 
   const pendingOrders = localOrders.value.filter((order) => !isTerminalLocalOrder(order));
@@ -117,12 +121,18 @@ async function refreshLocalOrders() {
 
   syncingLocalOrders.value = true;
   try {
-    const remoteOrders = await onSyncLocalOrders({
+    const syncPromise = onSyncLocalOrders({
       orders: pendingOrders.map((order) => ({
         orderNo: order.orderNo,
         queryToken: order.queryToken,
       })),
     });
+
+    const [remoteOrders] = await Promise.all([
+      syncPromise,
+      minLoadingMs > 0 ? wait(minLoadingMs) : Promise.resolve(),
+    ]);
+
     const remoteMap = new Map(remoteOrders.map((order) => [order.orderNo, order]));
     const merged = localOrders.value.map((order) => {
       const remote = remoteMap.get(order.orderNo);
@@ -136,6 +146,10 @@ async function refreshLocalOrders() {
   } finally {
     syncingLocalOrders.value = false;
   }
+}
+
+function handleRefreshLocalOrders() {
+  refreshLocalOrders(3000);
 }
 
 async function handleQuery() {

@@ -120,9 +120,9 @@ export async function importCards(input: { productId: number; lines: string; bat
   const adminContext = getAdminContext();
   const { prisma } = adminContext;
   const adminId = Number(adminContext.session?.user?.id);
-  const { items, removedCount } = parseCardLines(input.lines);
+  const { allItems, uniqueItems, removedCount } = parseCardLines(input.lines);
 
-  if (!items.length) {
+  if (!allItems.length) {
     throw badRequestError("没有可导入的卡密内容", "CARD_IMPORT_EMPTY");
   }
 
@@ -133,9 +133,11 @@ export async function importCards(input: { productId: number; lines: string; bat
       type: "input_duplicates" as const,
       message: "您当前输入的卡密重复，是否删除重复卡密？",
       removedCount,
-      items,
+      items: uniqueItems,
     };
   }
+
+  const items = input.skipInputDedup ? allItems : uniqueItems;
 
   // 验证商品是否存在且为自动发货卡密商品
   const product = await prisma.product.findUnique({ where: { id: input.productId } });
